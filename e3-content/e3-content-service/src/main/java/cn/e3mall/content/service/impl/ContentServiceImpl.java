@@ -8,7 +8,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import com.github.pagehelper.PageHelper;
+import com.github.pagehelper.PageInfo;
+
 import cn.e3mall.common.jedis.JedisClient;
+import cn.e3mall.common.pojo.EasyUIDataGridResult;
 import cn.e3mall.common.utils.E3Result;
 import cn.e3mall.common.utils.JsonUtils;
 import cn.e3mall.content.service.ContentService;
@@ -31,6 +35,9 @@ public class ContentServiceImpl implements ContentService {
 	@Value("${CONTENT_LIST}")
 	private String CONTENT_LIST;
 	
+	/**
+	 * 添加内容
+	 */
 	@Override
 	public E3Result addContent(TbContent content) {
 		//将内容数据插入到内容表
@@ -74,5 +81,52 @@ public class ContentServiceImpl implements ContentService {
 		}
  		return list;
 	}
+	/**
+	 * 更新内容
+	 */
+	@Override
+	public E3Result updateContent(TbContent content) {
+		// 将内容数据插入到内容表
+		content.setCreated(new Date());
+		content.setUpdated(new Date());
+		// 插入到数据库
+		contentMapper.updateByPrimaryKey(content);
+		// 缓存同步
+		jedisClient.hdel(CONTENT_LIST, content.getCategoryId().toString());
+		return E3Result.ok();
+	}
+	
+	/**
+	 * 获取内容列表
+	 */
+	@Override
+	public EasyUIDataGridResult getContentList(long categoryId, int page, int rows) {
+		// 根据categoryId查询
+		TbContentExample example = new TbContentExample();
+		Criteria criteria = example.createCriteria();
+		criteria.andCategoryIdEqualTo(categoryId);
+		// 分页管理
+		PageHelper.startPage(page, rows);
+		List<TbContent> list = contentMapper.selectByExample(example);
+		EasyUIDataGridResult result = new EasyUIDataGridResult();
+		// {total:”2”,rows:[{“id”:”1”,”name”:”张三”},{“id”:”2”,”name”:”李四”}]}
+		// rows中包含了放在该页的所有商品对象的json格式
+		result.setRows(list);
+		PageInfo<TbContent> pageInfo = new PageInfo<>(list);
+		result.setTotal(pageInfo.getTotal());
+		return result;
+	}
+	
+	/**
+	 * 删除内容
+	 */
+	@Override
+	public E3Result deleteContent(long[] contentId) {
+		for (long l : contentId) {
+			contentMapper.deleteByPrimaryKey(l);
+		}
+		return E3Result.ok();
+	}
+
 
 }

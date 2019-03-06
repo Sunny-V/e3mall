@@ -41,47 +41,50 @@ public class ItemServiceImpl implements ItemService {
 
 	@Autowired
 	private TbItemMapper itemMapper;
+
 	@Autowired
-	private TbItemDescMapper itemDescMapper;
+	private TbItemDescMapper itemdeDescMapper;
+
 	@Autowired
 	private JmsTemplate jmsTemplate;
 	@Resource
 	private Destination topicDestination;
+
 	@Autowired
 	private JedisClient jedisClient;
-	
+
 	@Value("${REDIS_ITEM_PRE}")
 	private String REDIS_ITEM_PRE;
 	@Value("${ITEM_CACHE_EXPIRE}")
 	private Integer ITEM_CACHE_EXPIRE;
-	
-	
+
 	@Override
 	public TbItem getItemById(long itemId) {
-		//查询缓存
+		// 查询缓存
 		try {
 			String json = jedisClient.get(REDIS_ITEM_PRE + ":" + itemId + ":BASE");
-			if(StringUtils.isNotBlank(json)) {
+			System.out.println(json);// 便于测试的时候使用
+			if (StringUtils.isNotBlank(json)) {
 				TbItem tbItem = JsonUtils.jsonToPojo(json, TbItem.class);
 				return tbItem;
 			}
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
-		//缓存中没有，查询数据库
-		//根据主键查询
-		//TbItem tbItem = itemMapper.selectByPrimaryKey(itemId);
+		// 缓存中没有，查询数据库
+		// 根据主键查询
+		// TbItem tbItem = itemMapper.selectByPrimaryKey(itemId);
 		TbItemExample example = new TbItemExample();
 		Criteria criteria = example.createCriteria();
-		//设置查询条件
+		// 设置查询条件
 		criteria.andIdEqualTo(itemId);
-		//执行查询
+		// 执行查询
 		List<TbItem> list = itemMapper.selectByExample(example);
 		if (list != null && list.size() > 0) {
-			//把结果添加到缓存
+			// 把结果添加到缓存
 			try {
 				jedisClient.set(REDIS_ITEM_PRE + ":" + itemId + ":BASE", JsonUtils.objectToJson(list.get(0)));
-				//设置过期时间
+				// 设置过期时间
 				jedisClient.expire(REDIS_ITEM_PRE + ":" + itemId + ":BASE", ITEM_CACHE_EXPIRE);
 			} catch (Exception e) {
 				e.printStackTrace();
@@ -91,114 +94,142 @@ public class ItemServiceImpl implements ItemService {
 		return null;
 	}
 
-	@Override
-	public EasyUIDataGridResult getItemList(int page, int rows) {
-		//设置分页信息
-		PageHelper.startPage(page, rows);
-		//执行查询
-		TbItemExample example = new TbItemExample();
-		List<TbItem> list = itemMapper.selectByExample(example);
-		//创建一个返回值对象
-		EasyUIDataGridResult result = new EasyUIDataGridResult();
-		result.setRows(list);
-		//取分页结果
-		PageInfo<TbItem> pageInfo = new PageInfo<>(list);
-		//取总记录数
-		long total = pageInfo.getTotal();
-		result.setTotal(total);
-		return result;
-	}
-
-	@Override
-	public E3Result addItem(TbItem item, String desc) {
-		//生成商品id
-		final long itemId = IDUtils.genItemId();
-		//补全item的属性
-		item.setId(itemId);
-		//1-正常，2-下架，3-删除
-		item.setStatus((byte) 1);
-		item.setCreated(new Date());
-		item.setUpdated(new Date());
-		//向商品表插入数据
-		itemMapper.insert(item);
-		//创建一个商品描述表对应的pojo对象。
-		TbItemDesc itemDesc = new TbItemDesc();
-		//补全属性
-		itemDesc.setItemId(itemId);
-		itemDesc.setItemDesc(desc);
-		itemDesc.setCreated(new Date());
-		itemDesc.setUpdated(new Date());
-		//向商品描述表插入数据
-		itemDescMapper.insert(itemDesc);
-		//发送商品添加消息
-		jmsTemplate.send(topicDestination, new MessageCreator() {
-			
-			@Override
-			public Message createMessage(Session session) throws JMSException {
-				TextMessage textMessage = session.createTextMessage(itemId + "");
-				return textMessage;
-			}
-		});
-		
-		//返回成功
-		return E3Result.ok();
-	}
-	@Override
-	public E3Result getItemDescById(Long itemId) {
-		// TODO Auto-generated method stub
-		TbItemDesc tbItemDesc = itemDescMapper.selectByPrimaryKey(itemId);
-		return new E3Result(tbItemDesc);
-	}
-	@Override
-	public E3Result updateItem(TbItem item, String desc) {
-		// TODO Auto-generated method stub
-		Date date = new Date();
-		item.setCreated(date);
-		item.setUpdated(date);
-		itemMapper.updateByPrimaryKeySelective(item);
-		TbItemDesc tbItemDesc = new TbItemDesc();
-		tbItemDesc.setItemId(item.getId());
-		tbItemDesc.setItemDesc(desc);
-		tbItemDesc.setCreated(date);
-		tbItemDesc.setUpdated(date);
-		itemDescMapper.updateByPrimaryKeySelective(tbItemDesc);
-		return E3Result.ok();
-	}
-	@Override
-	public E3Result deleteItems(String params) {
-		// TODO Auto-generated method stub
-		String[] ids = params.split(",");
-		for (String string : ids) {
-			TbItem tbItem = new TbItem();
-			tbItem.setId(Long.valueOf(string));
-			tbItem.setStatus((byte)3);
-			itemMapper.updateByPrimaryKeySelective(tbItem);
-		}
-		return E3Result.ok();
-	}
-
+	/**
+	 * 根据商品Id查询商品的描述信息
+	 */
 	@Override
 	public TbItemDesc getItemDescById(long itemId) {
-		//查询缓存
+		// 查询缓存
 		try {
 			String json = jedisClient.get(REDIS_ITEM_PRE + ":" + itemId + ":DESC");
-			if(StringUtils.isNotBlank(json)) {
+			if (StringUtils.isNotBlank(json)) {
 				TbItemDesc tbItemDesc = JsonUtils.jsonToPojo(json, TbItemDesc.class);
 				return tbItemDesc;
 			}
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
-		TbItemDesc itemDesc = itemDescMapper.selectByPrimaryKey(itemId);
-		//把结果添加到缓存
+		TbItemDesc itemDesc = itemdeDescMapper.selectByPrimaryKey(itemId);
+		// 把结果添加到缓存
 		try {
 			jedisClient.set(REDIS_ITEM_PRE + ":" + itemId + ":DESC", JsonUtils.objectToJson(itemDesc));
-			//设置过期时间
+			// 设置过期时间
 			jedisClient.expire(REDIS_ITEM_PRE + ":" + itemId + ":DESC", ITEM_CACHE_EXPIRE);
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
 		return itemDesc;
+	};
+
+	/**
+	 * 获取商品列表的方法
+	 */
+	@Override
+	public EasyUIDataGridResult getItemList(int page, int rows) {
+		// 设置分页信息
+		PageHelper.startPage(page, rows);
+		// 执行查询
+		TbItemExample example = new TbItemExample();
+		List<TbItem> list = itemMapper.selectByExample(example);
+		// 创建一个返回值对象
+		EasyUIDataGridResult result = new EasyUIDataGridResult();
+		result.setRows(list);
+		// 取分页结果
+		PageInfo<TbItem> pageInfo = new PageInfo<>(list);
+		// 取总记录数
+		long total = pageInfo.getTotal();
+		result.setTotal(total);
+		return result;
+	}
+
+	/**
+	 * 保存商品信息到数据库中的方法
+	 */
+	@Override
+	public E3Result addItem(TbItem item, String desc) {
+		// 1、生成商品id
+		final long itemId = IDUtils.genItemId();
+		// 2、补全TbItem对象的属性
+		item.setId(itemId);
+		// 商品状态，1-正常，2-下架，3-删除
+		item.setStatus((byte) 1);
+		Date date = new Date();
+		item.setCreated(date);
+		item.setUpdated(date);
+		// 3、向商品表插入数据
+		itemMapper.insert(item);
+		// 4、创建一个TbItemDesc对象
+		TbItemDesc itemDesc = new TbItemDesc();
+		// 5、补全TbItemDesc的属性
+		itemDesc.setItemId(itemId);
+		itemDesc.setItemDesc(desc);
+		itemDesc.setCreated(date);
+		itemDesc.setUpdated(date);
+		// 6、向商品描述表插入数据
+		itemdeDescMapper.insert(itemDesc);
+		// 发送商品添加消息
+		jmsTemplate.send(topicDestination, new MessageCreator() {
+
+			@Override
+			public Message createMessage(Session session) throws JMSException {
+				TextMessage textMessage = session.createTextMessage(itemId + "");
+				return textMessage;
+			}
+
+		});
+		// 7、E3Result.ok()
+		return E3Result.ok();
+
+	}
+
+	/**
+	 * 删除选中的商品的方法
+	 */
+	@Override
+	public E3Result deleteItem(long[] itemId) {
+		// 删除商品
+		for (long l : itemId) {
+			itemMapper.deleteByPrimaryKey(l);
+		}
+		// 删除商品的描述
+		for (long l : itemId) {
+			itemdeDescMapper.deleteByPrimaryKey(l);
+		}
+		return E3Result.ok();
+	}
+
+	/**
+	 * 下架商品
+	 */
+	@Override
+	public E3Result dropoffItem(long[] itemId, TbItem item) {
+		for (long l : itemId) {
+			item = itemMapper.selectByPrimaryKey(l);
+			item.setStatus((byte) 2);
+			// 创建时间不变
+			item.setCreated(item.getCreated());
+			// 更新日期改变
+			item.setUpdated(new Date());
+			itemMapper.updateByPrimaryKeySelective(item);
+		}
+
+		return E3Result.ok();
+	}
+
+	/**
+	 * 上架商品
+	 */
+	@Override
+	public E3Result upperoffItem(long[] itemId, TbItem item) {
+		for (long l : itemId) {
+			item = itemMapper.selectByPrimaryKey(l);
+			item.setStatus((byte) 1);
+			item.setCreated(item.getCreated());
+			item.setUpdated(new Date());
+			itemMapper.updateByPrimaryKeySelective(item);
+		}
+
+		return E3Result.ok();
 	}
 
 }

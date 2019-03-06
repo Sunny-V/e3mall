@@ -11,6 +11,11 @@ import org.springframework.web.multipart.MultipartFile;
 
 import cn.e3mall.common.utils.FastDFSClient;
 import cn.e3mall.common.utils.JsonUtils;
+/**
+ * 上传图片到图片服务器
+ * @author 神秘V
+ *
+ */
 
 @Controller
 public class PictureController {
